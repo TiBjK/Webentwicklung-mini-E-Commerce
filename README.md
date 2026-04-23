@@ -3,7 +3,7 @@
 ## Zeitraum & Abgabe
 •	Parallel zur Vorlesung 
 
-•	Abgabe: Letzter Freitag vor den Abschlusspräsentationen (24.04, 20:00 Uhr) 
+•	Abgabe: Letzter Freitag vor den Abschlusspräsentationen (01.05 oder 02.05, 20:00 Uhr) 
 
 •	Code auf GitHub mit Ausführungserklärung 
 
