@@ -4,7 +4,7 @@ Ein Microservices-basiertes E-Commerce-System, entwickelt im Rahmen der Vorlesun
 
 Alle Services sind mit **FastAPI (Python)** implementiert, kommunizieren per **REST/JSON** und werden über **Docker Compose** (lokal) sowie **Kubernetes** (Produktion) betrieben.  
 Live-Benachrichtigungen werden über **Server-Sent Events (SSE)** realisiert.  
-Das Frontend besteht aus drei **Single-Page-Application**-HTML-Seiten (Shop, Checkout, Admin).
+Das Frontend ist eine **Single Page Application (SPA)** – eine einzige `index.html` mit clientseitigem Routing zwischen Shop-, Checkout- und Admin-View.
 
 ---
 
@@ -19,9 +19,7 @@ micro-ecommerce/
 │   ├── order-service/         # Port 8003 – Bestellungen
 │   └── notification-service/  # Port 8004 – SSE-Benachrichtigungen
 ├── frontend/
-│   ├── shop.html              # Produktübersicht, Login, Warenkorb
-│   ├── checkout.html          # Bestellformular + SSE Live-Feed
-│   └── admin.html             # Dashboard: Produkte, Bestände, Bestellungen
+│   └── index.html             # SPA: Shop, Checkout und Admin in einer Datei
 ├── docker-compose.yml
 ├── kubernetes.yaml
 └── README.md
@@ -35,7 +33,7 @@ Datenpersistenz: JSON-Dateien in `/app/data` (via Docker Volumes / Kubernetes PV
 ## 🏗️ Architektur
 
 ```
-Browser (SPA – shop.html / checkout.html / admin.html)
+Browser (SPA – index.html, clientseitiges Routing via History API)
         │
         ▼  HTTP REST/JSON
 ┌───────────────────┐
@@ -52,10 +50,19 @@ Product  Inventory    Order          Notification
   │        └────────────┘  Stock         │
   │                      │  POST notif.  │
   │                      └──────────────▶│
-  │                                      │ SSE-Stream
+  │                                      │ SSE-Stream (via Gateway)
   │                                      ▼
-JSON-PVC              JSON-PVC       JSON-PVC + In-Memory Queue
+JSON-PVC              JSON-PVC       JSON-PVC (dateibasiertes Polling)
 ```
+
+### Single Page Application (SPA)
+
+Das Frontend (`index.html`) ist als SPA umgesetzt. Es gibt keine separaten HTML-Seiten mehr – alle drei Views (Shop, Checkout, Admin) leben in einer einzigen Datei und werden über JavaScript ein- und ausgeblendet. Die Navigation nutzt die **History API** (`history.pushState`), sodass die URL im Browser aktualisiert wird, ohne die Seite neu zu laden. Der Browser-Zurück-Button funktioniert entsprechend.
+
+Der Router schützt Views rollenbasiert:
+- Checkout und Admin sind ohne Login nicht erreichbar
+- Der Admin-Link in der Navigation erscheint nur für Nutzer mit der Rolle `admin`
+- Nach dem Login landet ein Admin direkt im Admin-Dashboard, ein normaler User im Shop
 
 ### Kommunikationsmuster
 
@@ -63,7 +70,7 @@ JSON-PVC              JSON-PVC       JSON-PVC + In-Memory Queue
 |--------|--------------|
 | **Synchrones REST** | Gateway → alle Services; Order → Inventory (Reservierung) |
 | **Asynchrones REST (fire-and-forget)** | Order → Notification (Fehler werden ignoriert, Bestellung bleibt gültig) |
-| **Server-Sent Events (SSE)** | Notification-Service → Browser (Live-Updates) |
+| **Server-Sent Events (SSE)** | Notification-Service → Browser via Gateway (Live-Updates in Shop und Admin) |
 
 ### Authentifizierung & Autorisierung (RBAC)
 
@@ -72,13 +79,14 @@ JSON-PVC              JSON-PVC       JSON-PVC + In-Memory Queue
 - Gateway prüft Rolle vor jeder Weiterleitung:
   - `admin`: Vollzugriff (Produkte anlegen/löschen, Bestände setzen, alle Bestellungen einsehen/stornieren)
   - `user`: Nur lesen & Bestellungen aufgeben
+- SPA-Router versteckt Admin-Elemente für normale User clientseitig
 
 ---
 
 ## 🔧 Voraussetzungen
 
 | Tool | Version | Download |
-|------|---------|---------| 
+|------|---------|---------|
 | **Python** | 3.12+ | https://python.org |
 | **Docker Desktop** | aktuell | https://docker.com/products/docker-desktop |
 | **kubectl** | aktuell | https://kubernetes.io/docs/tasks/tools/ |
@@ -99,21 +107,18 @@ docker-compose down
 docker-compose down -v
 ```
 
-Nach dem Start sind alle Services erreichbar:
+Nach dem Start:
 
 | Seite / Service | URL |
 |----------------|-----|
-| **Shop (SPA)** | http://localhost:8000/frontend/shop.html |
-| **Checkout (SPA)** | http://localhost:8000/frontend/checkout.html |
-| **Admin (SPA)** | http://localhost:8000/frontend/admin.html |
+| **SPA (Shop / Checkout / Admin)** | http://localhost:8000/frontend/index.html |
 | **Gateway Swagger** | http://localhost:8000/docs |
 | Product Swagger | http://localhost:8001/docs |
 | Inventory Swagger | http://localhost:8002/docs |
 | Order Swagger | http://localhost:8003/docs |
 | Notification Swagger | http://localhost:8004/docs |
 
-> **Hinweis:** Das Frontend kommuniziert direkt mit `http://localhost:8000` (Gateway).  
-> `checkout.html` verbindet sich für den SSE-Stream direkt mit `http://localhost:8004`, da SSE-Proxy über den Gateway Buffering-Probleme verursachen kann.
+> **Hinweis:** Der SSE-Stream läuft über den Gateway (`/api/notifications/stream`). Da `EventSource` im Browser keine Custom-Header unterstützt, wird das JWT-Token als Query-Parameter übergeben.
 
 ## ☸️ Kubernetes deployen (Docker Desktop)
 
@@ -136,13 +141,9 @@ docker build -t micro-ecommerce/notification-service:latest ./services/notificat
 # Namespace, Secret, PVCs, Deployments, Services anlegen
 kubectl apply -f kubernetes.yaml
 
-# Alten leeren ConfigMap löschen und mit echten HTML-Dateien neu erstellen
-kubectl delete configmap frontend-files -n micro-ecommerce
-kubectl create configmap frontend-files `
-  --from-file=shop.html=./frontend/shop.html `
-  --from-file=checkout.html=./frontend/checkout.html `
-  --from-file=admin.html=./frontend/admin.html `
-  -n micro-ecommerce
+# ConfigMap mit der SPA befüllen
+# --dry-run + apply funktioniert immer, egal ob der ConfigMap schon existiert oder nicht
+kubectl create configmap frontend-files --from-file=index.html=./frontend/index.html -n micro-ecommerce --dry-run=client -o yaml | kubectl apply -f -
 
 # Gateway neu starten damit er das Frontend-Volume aufnimmt
 kubectl rollout restart deployment/gateway-service -n micro-ecommerce
@@ -150,16 +151,21 @@ kubectl rollout restart deployment/gateway-service -n micro-ecommerce
 
 ### 3. Frontend öffnen
 
-Sobald die Pods laufen (~30 Sekunden), Port-Forwarding starten:
+Warten bis alle Pods laufen (ca. 30 Sekunden), Status prüfen:
+
+```bash
+kubectl get pods -n micro-ecommerce
+```
+
+Dann Port-Forwarding starten:
 
 ```bash
 kubectl port-forward -n micro-ecommerce service/gateway-service 8080:80
 ```
 
-Dann im Browser:
-- http://localhost:8080/frontend/shop.html
-- http://localhost:8080/frontend/checkout.html
-- http://localhost:8080/frontend/admin.html
+Dann im Browser: http://localhost:8080/frontend/index.html
+
+> **Bei erneutem Deployment** (nach Änderungen) immer denselben Ablauf wiederholen: erst `kubectl delete -f kubernetes.yaml`, dann wieder ab Schritt 1.
 
 ### 4. Logs & Debugging
 
@@ -180,7 +186,8 @@ kubectl delete -f kubernetes.yaml
 ---
 
 ## 🔐 API testen – Schritt-für-Schritt
-Unter `http://localhost:8000/docs` (oder `http://localhost:8080/docs`, wenn port forwarding gemacht wurde) erreichbar
+
+Unter `http://localhost:8000/docs` (oder `http://localhost:8080/docs` bei Port-Forwarding) erreichbar.
 
 ### 1. Login → Token holen
 
@@ -232,17 +239,16 @@ Unter `http://localhost:8000/docs` (oder `http://localhost:8080/docs`, wenn port
 }
 ```
 
-→ Order-Service reserviert automatisch Bestand beim Inventory-Service  
-→ Notification-Service empfängt die Benachrichtigung und pusht sie per SSE
+Der Order-Service reserviert automatisch den Bestand beim Inventory-Service und löst eine Benachrichtigung im Notification-Service aus, die per SSE an alle verbundenen Clients gepusht wird.
 
 ### 6. Live-Benachrichtigungen (SSE)
 
 ```bash
 # Terminal
-curl -N http://localhost:8004/notifications/stream
+curl -N http://localhost:8000/api/notifications/stream
 
 # Browser-Konsole
-const es = new EventSource('http://localhost:8004/notifications/stream');
+const es = new EventSource('http://localhost:8000/api/notifications/stream');
 es.onmessage = e => console.log(JSON.parse(e.data));
 ```
 
@@ -258,9 +264,9 @@ Jeder Service stellt `/health` und `/metrics` bereit:
 | Product | Anzahl Produkte, Uptime |
 | Inventory | Anzahl Artikel, Gesamt-Lagereinheiten, Uptime |
 | Order | Gesamtbestellungen, Aufschlüsselung nach Status, Uptime |
-| Notification | Anzahl Benachrichtigungen, aktive SSE-Clients, Uptime |
+| Notification | Anzahl Benachrichtigungen, Poll-Intervall, Uptime |
 
-**Business-KPIs** werden im Admin-Dashboard (`admin.html`) visualisiert:
+**Business-KPIs** werden im Admin-View der SPA visualisiert:
 - Anzahl Produkte, Bestellungen, Lagereinheiten
 - Gesamtumsatz (ohne stornierte Bestellungen)
 
@@ -293,7 +299,10 @@ kubectl get storageclass   # Standard-StorageClass vorhanden?
 ```
 
 **SSE-Stream bricht ab:**  
-Heartbeat alle 15 Sekunden hält die Verbindung offen. Bei nginx-Proxy: `proxy_buffering off` setzen.
+Der Client versucht automatisch alle 3 Sekunden eine neue Verbindung. Heartbeat alle 15 Sekunden hält die Verbindung durch Proxies offen.
 
 **Frontend zeigt „Fehler beim Laden":**  
 CORS ist mit `allow_origins=["*"]` konfiguriert. Browser-Cache leeren oder Inkognito-Modus nutzen.
+
+**SPA zeigt falsche View nach Reload:**  
+Der Gateway muss alle Routen auf `index.html` weiterleiten. Bei direktem Datei-Aufruf über `file://` funktioniert die History API nicht – immer über den Gateway (`http://localhost:8000`) aufrufen.
