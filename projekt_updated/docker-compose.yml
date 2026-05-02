@@ -1,0 +1,76 @@
+version: "3.9"
+
+# Alle Services starten: docker-compose up --build
+# Swagger-UI des Gateways: http://localhost:8000/docs
+
+services:
+
+  gateway-service:
+    build: ./services/gateway-service
+    ports:
+      - "8000:8000"
+    environment:
+      JWT_SECRET: "super-geheimes-jwt-secret"
+      PRODUCT_SERVICE_URL:       "http://product-service:8001"
+      INVENTORY_SERVICE_URL:     "http://inventory-service:8002"
+      ORDER_SERVICE_URL:         "http://order-service:8003"
+      NOTIFICATION_SERVICE_URL:  "http://notification-service:8004"
+    volumes:
+      - ./frontend:/app/frontend
+    depends_on:
+      - product-service
+      - inventory-service
+      - order-service
+      - notification-service
+    restart: unless-stopped
+
+  product-service:
+    build: ./services/product-service
+    ports:
+      - "8001:8001"
+    volumes:
+      - product-data:/app/data
+    environment:
+      DATA_FILE: "data/products.json"
+    restart: unless-stopped
+
+  inventory-service:
+    build: ./services/inventory-service
+    ports:
+      - "8002:8002"
+    volumes:
+      - inventory-data:/app/data
+    environment:
+      DATA_FILE: "data/inventory.json"
+    restart: unless-stopped
+
+  order-service:
+    build: ./services/order-service
+    ports:
+      - "8003:8003"
+    volumes:
+      - order-data:/app/data
+    environment:
+      DATA_FILE:                 "data/orders.json"
+      INVENTORY_SERVICE_URL:    "http://inventory-service:8002"
+      NOTIFICATION_SERVICE_URL: "http://notification-service:8004"
+    depends_on:
+      - inventory-service
+      - notification-service
+    restart: unless-stopped
+
+  notification-service:
+    build: ./services/notification-service
+    ports:
+      - "8004:8004"
+    volumes:
+      - notification-data:/app/data
+    environment:
+      DATA_FILE: "data/notifications.json"
+    restart: unless-stopped
+
+volumes:
+  product-data:
+  inventory-data:
+  order-data:
+  notification-data:

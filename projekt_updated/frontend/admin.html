@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MicroShop – Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0e0e0e;--surface:#171717;--card:#1e1e1e;--border:#2a2a2a;--accent:#c8f04a;--accent-dim:#9ab832;--text:#f0ede6;--muted:#888;--danger:#ff5c5c;--warn:#ff9f43;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:1.2rem 2.5rem;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(14,14,14,0.92);backdrop-filter:blur(12px);z-index:100;}
+  .logo{font-family:'Playfair Display',serif;font-size:1.5rem;letter-spacing:-0.02em;}
+  .logo span{color:var(--accent);}
+  .nav-right{display:flex;gap:1rem;align-items:center;}
+  .nav-links{display:flex;gap:1.5rem;}
+  .nav-links a{color:var(--muted);text-decoration:none;font-size:0.9rem;transition:color .2s;}
+  .nav-links a:hover,.nav-links a.active{color:var(--text);}
+  #nav-user{font-size:0.82rem;color:var(--muted);}
+  .logout-btn{background:transparent;border:1px solid var(--border);color:var(--muted);padding:0.35rem 0.8rem;border-radius:6px;font-family:inherit;font-size:0.8rem;cursor:pointer;transition:all .2s;}
+  .logout-btn:hover{border-color:var(--danger);color:var(--danger);}
+
+  #login-banner{background:var(--surface);border-bottom:1px solid var(--border);padding:0.8rem 2.5rem;display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;}
+  #login-banner input{background:var(--card);border:1px solid var(--border);color:var(--text);padding:0.45rem 0.9rem;border-radius:7px;font-family:inherit;font-size:0.85rem;width:160px;transition:border-color .2s;}
+  #login-banner input:focus{outline:none;border-color:var(--accent);}
+  .login-submit{background:var(--accent);color:#0e0e0e;border:none;padding:0.45rem 1.1rem;border-radius:7px;font-family:inherit;font-weight:500;cursor:pointer;font-size:0.85rem;}
+  #login-error{color:var(--danger);font-size:0.82rem;}
+
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);}
+  .stat{background:var(--card);padding:1.5rem;text-align:center;}
+  .stat-value{font-family:'Playfair Display',serif;font-size:2rem;color:var(--accent);}
+  .stat-label{font-size:0.75rem;color:var(--muted);margin-top:0.25rem;text-transform:uppercase;letter-spacing:0.08em;}
+
+  .admin-layout{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;padding:2rem 2.5rem;max-width:1400px;}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .panel.full{grid-column:1/-1;}
+  .panel-header{padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .panel-header h2{font-family:'Playfair Display',serif;font-size:1.1rem;}
+  .panel-body{padding:1.5rem;display:flex;flex-direction:column;gap:0.8rem;}
+  .form-group{display:flex;flex-direction:column;gap:0.35rem;}
+  .form-group label{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);}
+  .form-group input,.form-group select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:0.6rem 0.9rem;border-radius:7px;font-family:inherit;font-size:0.9rem;transition:border-color .2s;}
+  .form-group input:focus,.form-group select:focus{outline:none;border-color:var(--accent);}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;}
+  .btn{background:var(--accent);color:#0e0e0e;border:none;padding:0.65rem 1.2rem;border-radius:7px;font-family:inherit;font-weight:500;cursor:pointer;font-size:0.9rem;transition:background .2s;width:100%;}
+  .btn:hover{background:var(--accent-dim);}
+  .btn.secondary{background:transparent;border:1px solid var(--border);color:var(--text);}
+  .btn.secondary:hover{border-color:var(--accent);color:var(--accent);}
+
+  table{width:100%;border-collapse:collapse;font-size:0.85rem;}
+  th{text-align:left;padding:0.6rem 1rem;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);border-bottom:1px solid var(--border);}
+  td{padding:0.8rem 1rem;border-bottom:1px solid var(--border);}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:rgba(255,255,255,0.02);}
+  .badge{display:inline-block;padding:0.2rem 0.6rem;border-radius:999px;font-size:0.72rem;font-weight:500;}
+  .badge.confirmed{background:rgba(200,240,74,0.15);color:var(--accent);}
+  .badge.cancelled{background:rgba(255,92,92,0.15);color:var(--danger);}
+  .badge.pending{background:rgba(255,159,67,0.15);color:var(--warn);}
+  .stock-ok{color:var(--accent);}
+  .stock-low{color:var(--warn);}
+  .stock-out{color:var(--danger);}
+  .icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);padding:0.3rem 0.6rem;border-radius:5px;cursor:pointer;font-size:0.8rem;transition:all .2s;}
+  .icon-btn:hover{border-color:var(--danger);color:var(--danger);}
+  .loading{padding:2rem;text-align:center;color:var(--muted);font-size:0.85rem;}
+
+  #toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(100px);background:var(--surface);border:1px solid var(--border);padding:0.7rem 1.5rem;border-radius:999px;font-size:0.85rem;transition:transform .3s;z-index:300;white-space:nowrap;}
+  #toast.show{transform:translateX(-50%) translateY(0);}
+  #toast.success{border-color:var(--accent);color:var(--accent);}
+  #toast.error{border-color:var(--danger);color:var(--danger);}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">Micro<span>Shop</span></div>
+  <div class="nav-right">
+    <div class="nav-links">
+      <a href="shop.html">Shop</a>
+      <a href="checkout.html">Bestellung</a>
+      <a href="admin.html" class="active">Admin</a>
+    </div>
+    <span id="nav-user"></span>
+    <button class="logout-btn" id="nav-logout" onclick="logout()" style="display:none">Abmelden</button>
+  </div>
+</nav>
+
+<div id="login-banner">
+  <span style="color:var(--muted);font-weight:500">Admin-Login:</span>
+  <input type="text" id="u" placeholder="Benutzername (admin)">
+  <input type="password" id="p" placeholder="Passwort" onkeydown="if(event.key==='Enter')login()">
+  <button class="login-submit" onclick="login()">Einloggen →</button>
+  <span id="login-error"></span>
+</div>
+
+<div class="stats-grid">
+  <div class="stat"><div class="stat-value" id="s-products">–</div><div class="stat-label">Produkte</div></div>
+  <div class="stat"><div class="stat-value" id="s-orders">–</div><div class="stat-label">Bestellungen</div></div>
+  <div class="stat"><div class="stat-value" id="s-units">–</div><div class="stat-label">Lagereinheiten</div></div>
+  <div class="stat"><div class="stat-value" id="s-revenue">–</div><div class="stat-label">Umsatz</div></div>
+</div>
+
+<div class="admin-layout">
+  <div class="panel">
+    <div class="panel-header"><h2>Produkt anlegen</h2></div>
+    <div class="panel-body">
+      <div class="form-group"><label>Name</label><input id="p-name" placeholder="Laptop Pro 15"></div>
+      <div class="form-group"><label>Beschreibung</label><input id="p-desc" placeholder="Kurze Beschreibung..."></div>
+      <div class="form-row">
+        <div class="form-group"><label>Preis (€)</label><input id="p-price" type="number" step="0.01" placeholder="99.99"></div>
+        <div class="form-group"><label>Kategorie</label>
+          <select id="p-cat"><option>electronics</option><option>clothing</option><option>food</option><option>books</option><option>sports</option><option>general</option></select>
+        </div>
+      </div>
+      <div class="form-group"><label>Anfangsbestand</label><input id="p-stock" type="number" placeholder="10" value="10"></div>
+      <button class="btn" onclick="createProduct()">+ Produkt hinzufügen</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><h2>Bestand anpassen</h2></div>
+    <div class="panel-body">
+      <div class="form-group"><label>Produkt</label><select id="inv-product"><option value="">– Produkt wählen –</option></select></div>
+      <div class="form-group"><label>Neuer Bestand</label><input id="inv-qty" type="number" placeholder="50" min="0"></div>
+      <button class="btn" onclick="updateInventory()">Bestand aktualisieren</button>
+    </div>
+  </div>
+
+  <div class="panel full">
+    <div class="panel-header">
+      <h2>Produkte</h2>
+      <button class="btn secondary" style="width:auto;padding:0.4rem 1rem;font-size:0.8rem" onclick="loadAll()">↻ Aktualisieren</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Name</th><th>Kategorie</th><th>Preis</th><th>Bestand</th><th>ID</th><th>Aktion</th></tr></thead>
+        <tbody id="product-table"><tr><td colspan="6" class="loading">Bitte einloggen...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel full">
+    <div class="panel-header"><h2>Bestellungen</h2></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>ID</th><th>Kunde</th><th>E-Mail</th><th>Betrag</th><th>Status</th><th>Aktion</th></tr></thead>
+        <tbody id="order-table"><tr><td colspan="6" class="loading">Bitte einloggen...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = window.location.port === '8080' ? 'http://localhost:8080' : 'http://localhost:8000';
+let token = localStorage.getItem('token') || '';
+let products=[], inventory={}, orders=[];
+
+function updateNavAuth() {
+  const user = localStorage.getItem('username')||'';
+  const ok = !!token;
+  document.getElementById('nav-user').textContent = ok ? '👤 '+user : '';
+  document.getElementById('nav-logout').style.display = ok ? 'inline-block' : 'none';
+  document.getElementById('login-banner').style.display = ok ? 'none' : 'flex';
+}
+function logout() {
+  localStorage.removeItem('token'); localStorage.removeItem('username'); localStorage.removeItem('cart');
+  token=''; products=[]; inventory={}; orders=[];
+  updateNavAuth();
+  document.getElementById('product-table').innerHTML='<tr><td colspan="6" class="loading">Bitte einloggen...</td></tr>';
+  document.getElementById('order-table').innerHTML='<tr><td colspan="6" class="loading">Bitte einloggen...</td></tr>';
+  ['s-products','s-orders','s-units','s-revenue'].forEach(id=>document.getElementById(id).textContent='–');
+  showToast('Abgemeldet','');
+}
+updateNavAuth();
+if (token) loadAll();
+
+async function login() {
+  const u=document.getElementById('u').value.trim(), p=document.getElementById('p').value.trim();
+  const err=document.getElementById('login-error');
+  err.textContent='';
+  if(!u||!p){err.textContent='Bitte alle Felder ausfüllen.';return;}
+  try {
+    const r=await fetch(`${API}/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail);
+    token=d.access_token;
+    localStorage.setItem('token',token); localStorage.setItem('username',u);
+    updateNavAuth(); loadAll();
+  } catch(e){err.textContent='✗ '+e.message;}
+}
+
+async function loadAll() {
+  const h={Authorization:'Bearer '+token};
+  try {
+    const [pr,ir,or]=await Promise.all([
+      fetch(`${API}/api/products`,{headers:h}),
+      fetch(`${API}/api/inventory`,{headers:h}),
+      fetch(`${API}/api/orders`,{headers:h})
+    ]);
+    if(pr.status===401){logout();return;}
+    products=await pr.json();
+    const inv=await ir.json();
+    orders=await or.json();
+    inventory={};
+    inv.forEach(i=>inventory[i.product_id]=i.quantity);
+    renderStats(); renderProducts(); renderOrders(); populateProductSelect();
+  } catch(e){showToast('Ladefehler – bitte einloggen','error');}
+}
+
+function renderStats() {
+  document.getElementById('s-products').textContent=products.length;
+  document.getElementById('s-orders').textContent=orders.length;
+  document.getElementById('s-units').textContent=Object.values(inventory).reduce((a,b)=>a+b,0);
+  const rev=orders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.total,0);
+  document.getElementById('s-revenue').textContent='€'+rev.toFixed(0);
+}
+
+function renderProducts() {
+  const tbody=document.getElementById('product-table');
+  if(!products.length){tbody.innerHTML='<tr><td colspan="6" class="loading">Noch keine Produkte</td></tr>';return;}
+  tbody.innerHTML=products.map(p=>{
+    const qty=inventory[p.id]??0;
+    const sc=qty===0?'stock-out':qty<5?'stock-low':'stock-ok';
+    return `<tr>
+      <td><strong>${p.name}</strong></td>
+      <td><span style="font-size:0.75rem;color:var(--muted)">${p.category}</span></td>
+      <td>€${p.price.toFixed(2)}</td>
+      <td class="${sc}">${qty} Stk.</td>
+      <td style="font-family:monospace;font-size:0.75rem;color:var(--muted)">${p.id.slice(0,8)}…</td>
+      <td><button class="icon-btn" onclick="deleteProduct('${p.id}')">✕ Löschen</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderOrders() {
+  const tbody=document.getElementById('order-table');
+  if(!orders.length){tbody.innerHTML='<tr><td colspan="6" class="loading">Noch keine Bestellungen</td></tr>';return;}
+  tbody.innerHTML=orders.map(o=>`
+    <tr>
+      <td style="font-family:monospace;font-size:0.75rem">${o.id.slice(0,8)}…</td>
+      <td>${o.customer_name}</td>
+      <td style="color:var(--muted);font-size:0.82rem">${o.customer_email}</td>
+      <td>€${o.total.toFixed(2)}</td>
+      <td><span class="badge ${o.status}">${o.status}</span></td>
+      <td>${o.status!=='cancelled'?`<button class="icon-btn" onclick="cancelOrder('${o.id}')">Stornieren</button>`:'–'}</td>
+    </tr>`).join('');
+}
+
+function populateProductSelect() {
+  document.getElementById('inv-product').innerHTML='<option value="">– Produkt wählen –</option>'+
+    products.map(p=>`<option value="${p.id}">${p.name} (Bestand: ${inventory[p.id]??0})</option>`).join('');
+}
+
+async function createProduct() {
+  const name=document.getElementById('p-name').value.trim();
+  const desc=document.getElementById('p-desc').value.trim();
+  const price=parseFloat(document.getElementById('p-price').value);
+  const cat=document.getElementById('p-cat').value;
+  const stock=parseInt(document.getElementById('p-stock').value)||0;
+  if(!name||!price){showToast('Name und Preis sind Pflicht','error');return;}
+  try {
+    const r=await fetch(`${API}/api/products`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({name,description:desc,price,category:cat})});
+    const p=await r.json();
+    if(!r.ok) throw new Error(JSON.stringify(p));
+    if(stock>0) await fetch(`${API}/api/inventory/${p.id}`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({quantity:stock})});
+    showToast('✓ Produkt angelegt','success');
+    document.getElementById('p-name').value='';
+    document.getElementById('p-desc').value='';
+    document.getElementById('p-price').value='';
+    loadAll();
+  } catch(e){showToast('Fehler: '+e.message,'error');}
+}
+
+async function updateInventory() {
+  const id=document.getElementById('inv-product').value;
+  const qty=parseInt(document.getElementById('inv-qty').value);
+  if(!id){showToast('Bitte Produkt wählen','error');return;}
+  if(isNaN(qty)||qty<0){showToast('Ungültige Menge','error');return;}
+  try {
+    await fetch(`${API}/api/inventory/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({quantity:qty})});
+    showToast('✓ Bestand aktualisiert','success');
+    loadAll();
+  } catch(e){showToast('Fehler','error');}
+}
+
+async function deleteProduct(id) {
+  if(!confirm('Produkt wirklich löschen?')) return;
+  await fetch(`${API}/api/products/${id}`,{method:'DELETE',headers:{Authorization:'Bearer '+token}});
+  showToast('✓ Produkt gelöscht','success');
+  loadAll();
+}
+
+async function cancelOrder(id) {
+  if(!confirm('Bestellung wirklich stornieren?')) return;
+  await fetch(`${API}/api/orders/${id}/cancel`,{method:'PUT',headers:{Authorization:'Bearer '+token}});
+  showToast('✓ Bestellung storniert','success');
+  loadAll();
+}
+
+function showToast(msg,type='') {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='show '+type;
+  setTimeout(()=>t.className='',2500);
+}
+</script>
+</body>
+</html>
