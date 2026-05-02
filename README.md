@@ -1,135 +1,299 @@
-# Webentwicklung-mini-E-Commerce
+# 🛒 Micro-E-Commerce – Projektarbeit (WDS25B)
 
-## Zeitraum & Abgabe
-•	Parallel zur Vorlesung 
+Ein Microservices-basiertes E-Commerce-System, entwickelt im Rahmen der Vorlesung **Verteilte Systeme und Web Entwicklung** an der DHBW Karlsruhe.
 
-•	Abgabe: Letzter Freitag vor den Abschlusspräsentationen (01.05 oder 02.05, 20:00 Uhr) 
+Alle Services sind mit **FastAPI (Python)** implementiert, kommunizieren per **REST/JSON** und werden über **Docker Compose** (lokal) sowie **Kubernetes** (Produktion) betrieben.  
+Live-Benachrichtigungen werden über **Server-Sent Events (SSE)** realisiert.  
+Das Frontend besteht aus drei **Single-Page-Application**-HTML-Seiten (Shop, Checkout, Admin).
 
-•	Code auf GitHub mit Ausführungserklärung 
+---
 
-•	Bestmöglich automatisiert 
+## 📁 Projektstruktur
 
-•	Elemente und Technologien aus der Vorlesung 
+```
+micro-ecommerce/
+├── services/
+│   ├── gateway-service/       # Port 8000 – Login (JWT), RBAC & API-Proxy
+│   ├── product-service/       # Port 8001 – Produktkatalog
+│   ├── inventory-service/     # Port 8002 – Lagerverwaltung & Reservierung
+│   ├── order-service/         # Port 8003 – Bestellungen
+│   └── notification-service/  # Port 8004 – SSE-Benachrichtigungen
+├── frontend/
+│   ├── shop.html              # Produktübersicht, Login, Warenkorb
+│   ├── checkout.html          # Bestellformular + SSE Live-Feed
+│   └── admin.html             # Dashboard: Produkte, Bestände, Bestellungen
+├── docker-compose.yml
+├── kubernetes.yaml
+└── README.md
+```
 
-•	Nutzung weiterer Technologien erfordert vorherige Abstimmung mit dem Dozenten! 
+Jeder Service enthält: `main.py` · `requirements.txt` · `Dockerfile`  
+Datenpersistenz: JSON-Dateien in `/app/data` (via Docker Volumes / Kubernetes PVCs)
 
-•	Software muss containerisiert betreibbar sein und auf Kubernetes betrieben werden 
-________________________________________
-## Anforderung an die Umsetzung
-•	Mindestens 3-4 Microservices 
+---
 
-•	Kommunikation über die in der Vorlesung gelernten Protokolle (je nach Sinnhaftigkeit!) 
+## 🏗️ Architektur
 
-•	UI als Single Page Application 
+```
+Browser (SPA – shop.html / checkout.html / admin.html)
+        │
+        ▼  HTTP REST/JSON
+┌───────────────────┐
+│  Gateway :8000    │  ← Einziger externer Einstiegspunkt
+│  JWT-Auth + RBAC  │    Login, Token-Validierung, Rollen-Check
+│  API-Proxy        │    Leitet Requests an interne Services weiter
+└────────┬──────────┘
+         │  HTTP (internes Netz / Kubernetes ClusterIP)
+    ┌────┼─────────────────────────────────┐
+    ▼    ▼              ▼                  ▼
+Product  Inventory    Order          Notification
+:8001    :8002        :8003            :8004
+  │        ▲            │  Reserve       │
+  │        └────────────┘  Stock         │
+  │                      │  POST notif.  │
+  │                      └──────────────▶│
+  │                                      │ SSE-Stream
+  │                                      ▼
+JSON-PVC              JSON-PVC       JSON-PVC + In-Memory Queue
+```
 
-•	Authentifizierung / Autorisierung 
+### Kommunikationsmuster
 
-•	Monitoring über technisches Verhalten des verteilten Systems oder businessrelevanter KPIs: 
+| Muster | Wo eingesetzt |
+|--------|--------------|
+| **Synchrones REST** | Gateway → alle Services; Order → Inventory (Reservierung) |
+| **Asynchrones REST (fire-and-forget)** | Order → Notification (Fehler werden ignoriert, Bestellung bleibt gültig) |
+| **Server-Sent Events (SSE)** | Notification-Service → Browser (Live-Updates) |
 
-o	Nutzungsverhalten 
+### Authentifizierung & Autorisierung (RBAC)
 
-o	Nutzerzugriffe 
+- Login via `POST /login` → JWT-Token (HS256, 1h TTL)
+- Rolle im Token-Payload (`"role": "admin"` | `"user"`)
+- Gateway prüft Rolle vor jeder Weiterleitung:
+  - `admin`: Vollzugriff (Produkte anlegen/löschen, Bestände setzen, alle Bestellungen einsehen/stornieren)
+  - `user`: Nur lesen & Bestellungen aufgeben
 
-o	Einkäufe / Transaktionen 
+---
 
-o	Anzahl Notifications 
+## 🔧 Voraussetzungen
 
-o	Logs 
-________________________________________
-## Themenvorschläge / Use Case
+| Tool | Version | Download |
+|------|---------|---------| 
+| **Python** | 3.12+ | https://python.org |
+| **Docker Desktop** | aktuell | https://docker.com/products/docker-desktop |
+| **kubectl** | aktuell | https://kubernetes.io/docs/tasks/tools/ |
+| **minikube** *(für lokales K8s)* | aktuell | https://minikube.sigs.k8s.io/docs/start/ |
 
-•	Produkte, Warenkorb, Bestellung, Bestand, Benachrichtigung 
+---
 
-•	Microservices: 
+## 🚀 Lokal starten – Docker Compose
 
-o	Product Service 
+```bash
+# Im Hauptordner des Projekts:
+docker-compose up --build
 
-o	Order Service 
+# Alle Services stoppen:
+docker-compose down
 
-o	Inventory Service 
+# Volumes (gespeicherte JSON-Daten) komplett löschen:
+docker-compose down -v
+```
 
-o	Notification Service 
+Nach dem Start sind alle Services erreichbar:
 
-________________________________________
-## Abschlusspräsentation der Projektarbeit – Zeitraum
-•	Letzte Vorlesungseinheit(en) 
-________________________________________
-## Abschlusspräsentation – Vorstellung des Gesamtprojekts
+| Seite / Service | URL |
+|----------------|-----|
+| **Shop (SPA)** | http://localhost:8000/frontend/shop.html |
+| **Checkout (SPA)** | http://localhost:8000/frontend/checkout.html |
+| **Admin (SPA)** | http://localhost:8000/frontend/admin.html |
+| **Gateway Swagger** | http://localhost:8000/docs |
+| Product Swagger | http://localhost:8001/docs |
+| Inventory Swagger | http://localhost:8002/docs |
+| Order Swagger | http://localhost:8003/docs |
+| Notification Swagger | http://localhost:8004/docs |
 
-•	Kurze Einordnung der Problemstellung und Zielsetzung des Projekts 
+> **Hinweis:** Das Frontend kommuniziert direkt mit `http://localhost:8000` (Gateway).  
+> `checkout.html` verbindet sich für den SSE-Stream direkt mit `http://localhost:8004`, da SSE-Proxy über den Gateway Buffering-Probleme verursachen kann.
 
-•	Überblick über den fachlichen und technischen Kontext 
+## ☸️ Kubernetes deployen (Docker Desktop)
 
-•	Bezug zur Vorlesung: 
+**Voraussetzung:** Kubernetes in Docker Desktop aktivieren:  
+`Docker Desktop` → `Settings` → `Kubernetes` → **"Enable Kubernetes"** → `Apply & Restart`
 
-o	Klare Darstellung, welche Konzepte, Technologien und Architekturen aus der Vorlesung im Projekt eingesetzt wurden 
+### 1. Images bauen
 
-o	Erläuterung, warum diese Konzepte gewählt wurden 
+```bash
+docker build -t micro-ecommerce/gateway-service:latest      ./services/gateway-service
+docker build -t micro-ecommerce/product-service:latest      ./services/product-service
+docker build -t micro-ecommerce/inventory-service:latest    ./services/inventory-service
+docker build -t micro-ecommerce/order-service:latest        ./services/order-service
+docker build -t micro-ecommerce/notification-service:latest ./services/notification-service
+```
 
-________________________________________
-## Abschlusspräsentation – Architektur & technische Umsetzung
+### 2. Deployment
 
-•	Darstellung der System- und Softwarearchitektur 
+```bash
+# Namespace, Secret, PVCs, Deployments, Services anlegen
+kubectl apply -f kubernetes.yaml
 
-•	Beschreibung der Laufzeitinfrastruktur 
+# Alten leeren ConfigMap löschen und mit echten HTML-Dateien neu erstellen
+kubectl delete configmap frontend-files -n micro-ecommerce
+kubectl create configmap frontend-files `
+  --from-file=shop.html=./frontend/shop.html `
+  --from-file=checkout.html=./frontend/checkout.html `
+  --from-file=admin.html=./frontend/admin.html `
+  -n micro-ecommerce
 
-Projektumsetzung
+# Gateway neu starten damit er das Frontend-Volume aufnimmt
+kubectl rollout restart deployment/gateway-service -n micro-ecommerce
+```
 
-•	Vorstellung zentraler Features und Funktionalitäten 
+### 3. Frontend öffnen
 
-•	Einordnung der verwendeten Technologien (z.B. Webservices, Authentifizierung, verteilte Systeme) in das Gesamtsystem 
+Sobald die Pods laufen (~30 Sekunden), Port-Forwarding starten:
 
-Kompromisse & Abweichungen
+```bash
+kubectl port-forward -n micro-ecommerce service/gateway-service 8080:80
+```
 
-•	Transparente Erklärung von Kompromissen, Vereinfachungen oder Abweichungen von Best Practices 
-________________________________________
-## Abschlusspräsentation – Business-Bezug
+Dann im Browser:
+- http://localhost:8080/frontend/shop.html
+- http://localhost:8080/frontend/checkout.html
+- http://localhost:8080/frontend/admin.html
 
-•	Vorstellung der relevanten User-Gruppen 
+### 4. Logs & Debugging
 
-•	Beschreibung der zentralen Business-Prozesse im Projekt 
+```bash
+# Status aller Pods prüfen
+kubectl get pods -n micro-ecommerce
 
-•	Erklärung, wie technische Features konkrete Business-Anforderungen umsetzen 
+# Logs eines Services anzeigen
+kubectl logs -n micro-ecommerce deployment/gateway-service -f
+```
 
-Demonstration / Ablauf
+### 5. Alles entfernen
 
-•	Live-Demo 
+```bash
+kubectl delete -f kubernetes.yaml
+```
 
-•	Schritt-für-Schritt-Darstellung eines beispielhaften Prozessdurchlaufs 
+---
 
-Projektorganisation
+## 🔐 API testen – Schritt-für-Schritt
+Unter `http://localhost:8000/docs` (oder `http://localhost:8080/docs`, wenn port forwarding gemacht wurde) erreichbar
 
-•	Kurzer Überblick über Teamaufteilung und Zusammenarbeit 
-________________________________________
-## Dokumentation
+### 1. Login → Token holen
 
-1.	Technische Dokumentation 
+`POST http://localhost:8000/login`
+```json
+{ "username": "admin", "password": "password" }
+```
 
-o	Welche Konzepte aus der Vorlesung wurden wie angewandt 
+**Test-Accounts:**
 
-o	Kompromisse und Abweichungen von Best-Practice erklären 
+| User | Password | Rolle |
+|------|----------|-------|
+| `admin` | `password` | Admin (Vollzugriff) |
+| `user` | `user123` | User (lesen & bestellen) |
 
+### 2. Token in Swagger eintragen
 
-2.	Business Process-Dokumentation 
+`http://localhost:8000/docs` → **🔒 Authorize** → `Bearer <token>`
 
-o	Welche User-Gruppen gibt es? 
+### 3. Produkt anlegen (nur admin)
 
-o	Wie ist der Business Process für Kernprozesse im Projekt abgebildet? 
+`POST /api/products`
+```json
+{
+  "name": "Laptop Pro 15",
+  "description": "Leistungsstarker Laptop",
+  "price": 999.99,
+  "category": "electronics"
+}
+```
 
-o	Welche technischen Features oder Elemente wurden eingebaut, um eine Anforderung des Business Process technisch zu realisieren 
+### 4. Lagerbestand setzen (nur admin)
 
-o	Schritt-für-Schritt-Erklärung, wie der Prozess durchlaufen wird 
-________________________________________
-## Tipps und Tricks
+`PUT /api/inventory/{product_id}`
+```json
+{ "quantity": 50 }
+```
 
-•	Skizziert ein Konzept 
+### 5. Bestellung aufgeben (admin + user)
 
-•	Anforderungen 
+`POST /api/orders`
+```json
+{
+  "customer_name": "Max Mustermann",
+  "customer_email": "max@example.com",
+  "items": [
+    { "product_id": "<product_id>", "quantity": 2, "unit_price": 999.99 }
+  ]
+}
+```
 
-•	Architektur 
+→ Order-Service reserviert automatisch Bestand beim Inventory-Service  
+→ Notification-Service empfängt die Benachrichtigung und pusht sie per SSE
 
-•	Spricht das Konzept mit mir ab! 
+### 6. Live-Benachrichtigungen (SSE)
 
-•	Setzt das Projekt parallel mit den gelernten Technologien und Konzepten aus der Vorlesung um 
+```bash
+# Terminal
+curl -N http://localhost:8004/notifications/stream
 
-•	Bei Unklarheiten: Fragen!
+# Browser-Konsole
+const es = new EventSource('http://localhost:8004/notifications/stream');
+es.onmessage = e => console.log(JSON.parse(e.data));
+```
+
+---
+
+## 📊 Monitoring
+
+Jeder Service stellt `/health` und `/metrics` bereit:
+
+| Service | `/metrics` liefert |
+|---------|-------------------|
+| Gateway | Status, verfügbare Routes, registrierte User-Rollen |
+| Product | Anzahl Produkte, Uptime |
+| Inventory | Anzahl Artikel, Gesamt-Lagereinheiten, Uptime |
+| Order | Gesamtbestellungen, Aufschlüsselung nach Status, Uptime |
+| Notification | Anzahl Benachrichtigungen, aktive SSE-Clients, Uptime |
+
+**Business-KPIs** werden im Admin-Dashboard (`admin.html`) visualisiert:
+- Anzahl Produkte, Bestellungen, Lagereinheiten
+- Gesamtumsatz (ohne stornierte Bestellungen)
+
+Kubernetes nutzt `/health` als **Liveness Probe** für automatischen Neustart bei Fehlern.
+
+---
+
+## 🐛 Troubleshooting
+
+**Services starten nicht:**
+```bash
+docker-compose logs <service-name>
+```
+
+**„Connection refused" zwischen Services:**
+```bash
+docker-compose ps   # Alle Container laufen?
+```
+
+**Token abgelaufen:**  
+JWT läuft nach 1 Stunde ab → neu einloggen.
+
+**Kubernetes: `ImagePullBackOff`:**  
+`eval $(minikube docker-env)` muss **im selben Terminal** vor dem `docker build` ausgeführt werden.
+
+**Kubernetes: PVC bleibt `Pending`:**
+```bash
+kubectl describe pvc -n micro-ecommerce
+kubectl get storageclass   # Standard-StorageClass vorhanden?
+```
+
+**SSE-Stream bricht ab:**  
+Heartbeat alle 15 Sekunden hält die Verbindung offen. Bei nginx-Proxy: `proxy_buffering off` setzen.
+
+**Frontend zeigt „Fehler beim Laden":**  
+CORS ist mit `allow_origins=["*"]` konfiguriert. Browser-Cache leeren oder Inkognito-Modus nutzen.
